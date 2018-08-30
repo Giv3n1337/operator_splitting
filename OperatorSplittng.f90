@@ -3,10 +3,12 @@
 !           phi_t + (u*phi - D*phi_x)_x = 0 (1D)
 !           phi(0) = phi_0                  (IC)
 !
-! IC can be chosen via "inittype"	: 1-Gaussian, 2-Wave Packet
-! Reconstruction Types "recontype"	: 1-Gudonov,  2-PLM:
-!													|
-!         											+--> Limiter: 1-MC,2-SuperBee
+! IC can be chosen via "inittype"	: 1-Gaussian, 2-Wave Packet, 3-Square Wave
+! Reconstruction Type "recontype"	: 1-Gudonov,  2-PLM
+!												  |
+!         										  +--> Limiter: 1-MC, 2-SuperBee,
+!																3-TVD
+! Time Step "dttype" : 1-RK2 , 2-Midpoint, 3-Heun's
 !=================================================================================
 
 program OperatorSplitting_Simple
@@ -20,7 +22,7 @@ program OperatorSplitting_Simple
 	! TODO: Read Parameters from file
 	! amount of cells and amount of ghost cells
 	integer, parameter :: ncells 	= 64
-	integer, parameter :: ngcells 	= 3
+	integer, parameter :: ngcells 	= 1
 
 	! domain size
 	double precision, parameter :: xmin = 0.d0
@@ -34,6 +36,15 @@ program OperatorSplitting_Simple
 
 	! initial condition type
 	integer, parameter :: inittype = 1
+
+	! reconstruction type
+	integer, parameter :: recontype = 1
+
+	! if recontype == 2 --> PLM, choose slope limiter
+	integer, parameter :: limiter = 1
+
+	! time integration type
+	integer, parameter :: dttype = 1
 	
 	! maximum simulation time
 	double precision, parameter :: tmax = 5.d0
@@ -43,8 +54,11 @@ program OperatorSplitting_Simple
 	double precision, dimension(2*ngcells + ncells) :: phi, phi_left, phi_right, flux
 	double precision, dimension(2*ngcells + ncells) :: phi_init
 
-	double precision :: dx
-	double precision :: t, dt 
+	double precision :: dx, dt
+
+	! global parameters
+	double precision, save :: t
+	  
 
 	!=============================================================================
 	! Program
@@ -97,12 +111,13 @@ end program
 !-------------------------+
 ! output: writes out data |
 !-------------------------+
-subroutine output(ncells, ngcells, inittype, recontype, limiter, u, t, grid, phi, folder)
+subroutine output(ncells, ngcells, inittype, recontype, limiter, dttype , u, t,
+ 																grid, phi, folder)
 	
 	implicit none
 
 	integer, intent(in) :: ncells, ngcells
-	integer, intent(in) :: inittype, recontype, limiter
+	integer, intent(in) :: inittype, recontype, limiter, dttype
 	
 	double precision, intent(in) :: u, t
 	
@@ -112,7 +127,7 @@ subroutine output(ncells, ngcells, inittype, recontype, limiter, u, t, grid, phi
 	
 	character(len=50) :: pre_string
 	character(len=4)  :: time_string
-	character(len=16) :: recon, init, res
+	character(len=16) :: recon, init, res, tint
 
 	integer :: i, imin, imax
 
@@ -124,9 +139,11 @@ subroutine output(ncells, ngcells, inittype, recontype, limiter, u, t, grid, phi
 		recon = "godunov"
 	else if (recontype == 2) then 
 		if (limiter == 1) then
-			recon = "plm+mc"
+			recon = "plm+MC"
 		else if (limiter == 2) then
 			recon = "plm+SBee"
+		else if (limiter == 3) then
+			recon = "plm+TVD"
 		end if
 	end if
 
@@ -134,6 +151,16 @@ subroutine output(ncells, ngcells, inittype, recontype, limiter, u, t, grid, phi
 		init = "gaussian"
 	else if (inittype == 2) then
 		init = "packet"
+	else if (inittype == 3) then
+		init = "square"
+	end if
+
+	if (dttype == 1) then
+		tint = "RK2"
+	else if (dttype == 2) then
+		tint = "MP"
+	else if (dttype == 3) then
+		tint = "HEUN"
 	end if
 
 	! open output file
@@ -146,7 +173,10 @@ subroutine output(ncells, ngcells, inittype, recontype, limiter, u, t, grid, phi
 		pre_string="AdvDiff"
 	end if
 
-	open(unit=20, filename=pre_string//trim(recon)//"-"//trim(init)//"-ncells="//trim(adjustl(res))//"-t="//time_string, status="unknown")
+	open(unit=20, filename = pre_string//"-Strang-"//trim(recon)//"-"//			&
+							 trim(ttype)//"+CN-"//trim(init)//"-ncells="//		&
+							 trim(adjustl(res))//"-t="//time_string, 			&
+							 status="unknown")
 
 	do i = imin, imax
 		write(20, *) grid(i), phi(i)
@@ -177,7 +207,7 @@ subroutine setup_grid(ncells, ngcells, xmin, xmax, dx, grid)
 	! create the grid
 	dx = (xmax - xmin)/dble(ncells)
 
-	do i = 1, 2*ngcells + ncells
+	do i = 1, 2*ngcells+ncells
 		x(i) = (i - 0.5d0)*dx + xmin
 	end do
 
@@ -220,11 +250,20 @@ subroutine init(ncells, ngcells, inittype, grid, phi)
 			phi(i) = exp(-(x(i)- 0.5d0)**2/0.1d0**2)
 		end do
 
-	elseif(inittype == 2) then
+	else if(inittype == 2) then
 	! wave paket
 		do i = imin, imax
 			phi(i) = sin(16.d0*pi*x(i))*exp(-36.d0*(x(i)-0.5d0)**2)
 		end do
+
+	else if(inittype == 3) then
+	! square wave
+		if (x(i) > 0.333d0 .and. x(i) < 0.666d0) then
+			phi(i) = 1.d0
+		else
+			phi(i) = 0.d0
+		end if
+
 	end if 
 				
 	return
@@ -314,9 +353,9 @@ subroutine reconstruct(ncells, ngcells, dx, dt, u, recontype, limiter, &
 			phi_right(i) = phi(i)
 		end do
 	
-	elseif (recontype == 2) then
+	else if (recontype == 2) then
 
-		! PLM with MC limiter
+		! PLM with MC limiter (Monotonized Central)
 		if (limiter == 1) then
 
 			! interface states are found by Taylor expansionin time (trough dt/2)
@@ -335,7 +374,7 @@ subroutine reconstruct(ncells, ngcells, dx, dt, u, recontype, limiter, &
 			end do
 		
 		! PLM with SuperBee limiter
-		elseif (limiter == 2) then
+		else if (limiter == 2) then
 			
 			double precision :: slope1, slope2
 
@@ -345,38 +384,54 @@ subroutine reconstruct(ncells, ngcells, dx, dt, u, recontype, limiter, &
 
 				slope(i) = maxmod(slope1, slope2)
 			end do
+		
+		! PLM with TVD limiter (Total Variation Diminishing)
+		else if (limiter == 3) then
 
+			do i = imin-1, imax+1
+				! called dx*u in paper
+				slope(i) = max( ((phi(i+1) - phi(i)) * (phi(i) - phi(i-1)), 0) /&
+																(phi(i+1) - phi(i-1))
+			end do 
 		end if
 
-		! interfaces imin to imax+1 affect the data in cells [imin, imax]
-		do i = imin, imax+1
+		if (limiter == 1 .or. limiter == 2) then)
+			! interfaces imin to imax+1 affect the data in cells [imin, imax]
+			do i = imin, imax+1
 		
- 			! the left state on the current interface comes from cell i-1
-			phi_left(i)  = phi(i-1) + 0.5d0*dx*(1.d0 - u*(dt/dx))*slope(i-1)
+ 				! the left state on the current interface comes from cell i-1
+				phi_left(i)  = phi(i-1) + 0.5d0*dx*(1.d0 - u*(dt/dx))*slope(i-1)
 
-			! the right state on the current interface comes from cell i 
-			phi_right(i) = phi(i)   + 0.5d0*dx*(1.d0 + u*(dt/dx))*slope(i) 
-		end do
- 
+				! the right state on the current interface comes from cell i 
+				phi_right(i) = phi(i)   + 0.5d0*dx*(1.d0 + u*(dt/dx))*slope(i) 
+			end do
+		
+		else if (limiter == 3) then
+			do i = imin, imax+1
+				phi_left(i)  = phi(i) - slope(i)
+				phi_right(i) = phi(i) + slope(i)
+ 			end do
+		end if
+	
 	end if  
 
 	return
 end subroutine reconstruct
 
 
-!---------------------------------------------------------------+
-! solve_advection: calculates the fluxes for the advective part |
-!---------------------------------------------------------------+
-subroutine solve_advection(ncells, ngcells, u, dx, dt, phi, phi_left, phi_right, flux)
+!----------------------------------------------------------+
+! fluxes_adv: calculates the fluxes for the advective part |
+!----------------------------------------------------------+
+subroutine fluxes_adv(ncells, ngcells, u, phi_left, phi_right, phi, flux)
 
 	implicit none
 
 	integer, intent(in) :: ncells, ngcells
 	
-	double precision, dimension(2*ngcells+ncells), intent(in) :: phi_left, phi_right, flux
-	double precision, dimension(2*ngcells+ncells), intent(inout) :: phi
+	double precision, dimension(2*ngcells+ncells), intent(in) :: phi_left, phi_right, phi
+	double precision, dimension(2*ngcells+ncells), intent(inout) :: flux
 	
-	double precision, intent(in) :: u, dx, dt
+	double precision, intent(in) :: u
 	
 	integer :: i, imin, imax
 
@@ -385,58 +440,99 @@ subroutine solve_advection(ncells, ngcells, u, dx, dt, phi, phi_left, phi_right,
 
 	! loop over all interfaces and calculate the linear advective flux.   	
 	! the advection  velocity tells us which direction is upwind.
-
 	if (u <= 0.d0) then 
 		do i = imin, imax+1
 			flux(i) = u*phi_left(i)
 		end do
-
 	else
 		do i = imin, imax+1
 			flux(i) = u*phi_right(i)
 		end do
 
 	end if
-
-	call update_advection(ncells, ngcells, dx, dt, phi, flux)
+	
 	return
-end subroutine solve_advection
+end subroutine fluxes_adv
 
 
-
-!-------------------------------------------------------------------+
-! update: conservatively update the solution tho the new time level |
-!-------------------------------------------------------------------+
-subroutine update_advection(ncells, ngcells, dx, dt, phi, flux)
+!---------------------------------+
+! rhs_adv_timestep: rhs of adv eq |
+!---------------------------------+
+subroutine rhs_adv_timestep(ncells, ngcells, init, res, dt, dx, u, cn, recontype,	&
+		   	limiter, update)
 
 	implicit none
-	
-	integer, intent(in) :: ncells, ngcells
-	
-	double precision, intent(in) :: dx, dt
-	
-	double precision, dimension(2*ngcells+ncells), intent(in) :: flux
-	double precision, dimension(2*ngcells+ncells), intent(inout) :: phi
 
+	integer, intent(in) :: ncells, ngcells, update, recontype, limiter
+	
+	double precision, dimension(2*ngcells +ncells), intent(inout) :: init, res
+	double precision, intent(inout) :: dt
+	double precision, intent(in)	:: dx, u, cn
+
+	double precision, dimension(2*ngcells+ncells) :: phi_left, phi_right, flux
+	
 	integer :: i, imin, imax
 
-
-	imin = ngcells + 1
+	imin = ngcells + 1 
 	imax = ngcells + ncells
 
-	do i = imin, imax
-		phi(i) = phi(i) + (dt/dx)*(f(i) - f(i+1))
-	end do  
+
+	! compute next time step (if update == 1)
+	if (update == 1) then
+		call calc_dt(dx, u, cn, dt)
+	end if	
+
+	! calculates cell interfaces	
+	call reconstruct(ncells, ngcells, dt, dx, u, recontype, limiter,			 & 
+														init, phi_left, phi_right)
+	
+	! compute fluxes and timestep
+	call fluxes_adv(ncells, ngcells, u, phi_left, phi_right, init, flux)
+
+	do i = imin, imax 
+		res(i) = (flux(i) - flux(i+1)) / dx
+	end do
 
 	return
-end subroutine update_advection
+end subroutine rhs_adv_timestep
 
 
+!------------------------------------------------------------------+
+! RK2: Runge-Kutta time integration (2nd-Order depending in Alpha) |
+!------------------------------------------------------------------+
+subroutine RK2(ncells, ngcell, phi, alpha, dt, dx, u, cn, recontype, limiter)
+	
+	implicit none
 
+	integer, intent(in) :: ncells, ngcells
+	integer, intent(in) :: recontype, limiter	
 
+	double precision, intent(in) :: dt, dx, u, cn, alpha
+	double precision, dimension(2*ngcells+ncells), intent(inout) :: phi 
+ 	
+	double precision, dimension(2*ngcells+ncells) :: k_1, k_2_init, k_2
+	
+	imin = ngcells + 1
+	imax = ngcells + ncells 
 
+	call update_gcells(ncells, ngcells, phi)		
+	call rhs_adv_timestep(ncells, ngcells, phi, k_1, dt, dx, u, cn, recontype,	&
+																	   limiter, 1)
 
+	if (t + dt > tmax) then
+		dt = (tmax - t)
+	end if
 
+	k_2_init(imin:imax) = phi(imin:imax) + alpha*dt*k_1(imin:imax)
+	
+	call update_gcells(ncells, ngcells, k_2_init)
+	call rhs_adv_timestep(ncells, ngcells, phi, k_2, dt, dx, u, cn, recontype, &
+		     														   limiter, 0)
+
+	phi(imin:imax) = phi(imin:imax) + dt*( (1.d0-1.d0/(2.d0*alpha))*k_1(imin:imax) &
+										 	    +1.d0/(2.d0*alpha) *k_2(imin:imax) ) 
+	return     
+end subroutine RK2
 
 
 !=================================================================================
@@ -485,6 +581,7 @@ function maxmod(a,b)
     return maxmod
  
 end function maxmod
+
 
 
 
