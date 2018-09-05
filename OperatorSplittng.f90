@@ -86,14 +86,18 @@ program OperatorSplitting
 					! loop over rk2 methods
 					do dtt = 1, 3
 						t = 0.d0
-						call conv_test(max_exp, ngcells, tmax, t_wo, it, rt, li, dtt,&
+						cn= 0.8d0
+						tmax = 100.0d0
+						call conv_test(max_exp, ngcells, t_wo, it, rt, li, dtt,&
 											"/home/Documents/Operator_Splitting/Conv_Test/") 
 					end do
 				end do
 			else
 				do dtt = 1, 3
 					t = 0.d0
-					call conv_test(max_exp, ngcells, tmax, t_wo, it, rt, 1, dtt, 	 &
+					cn = 0.8d0
+					tmax = 100.0d0
+					call conv_test(max_exp, ngcells, t_wo, it, rt, 1, dtt, 	 &
 											"/home/Documents/Operator_Splitting/Conv_Test/")
 				end do
 			end if
@@ -149,23 +153,23 @@ end program
 !------------------------------------------------------------------------+
 ! conv_test_output: writes out the error in 1/N * (phi(t) - phi_init)**2 |
 !------------------------------------------------------------------------+
-subroutine conv_test_output(ncells, ngcells, phi, phi_init, t, inittype, recontype,	& 
+subroutine conv_test_output(ncells, ngcells, phi, phi_init, inittype, recontype,	& 
 															limiter, dttype, folder)
 	
+	use parameters
 	implicit none
 
 	integer, intent(in) :: ncells, ngcells
 	integer, intent(in) :: inittype, recontype, limiter, dttype
 	
-	double precision, intent(in) :: t
 	double precision, dimension(2*ngcells+ncells), intent(in) :: phi, phi_init
 	
-	character(len=*), optional, intent(in) :: folder
+	character(len=*), intent(in) :: folder
 
 	double precision :: err
 
 	character(len=4) :: time_string
-	character(len=100) :: pre_string
+	character(len=110) :: pre_string
 	character(len=16) :: recon, init, tint
 
 	integer :: i, imin, imax
@@ -202,17 +206,15 @@ subroutine conv_test_output(ncells, ngcells, phi, phi_init, t, inittype, reconty
 		tint = "HEUN"
 	end if
 
-	if(present(folder)) then
-		pre_string = trim(folder)//"/conv_test"
-	else
-		pre_string = "conv_test"
-	end if
+
+	pre_string = trim(folder)//"conv_test"
+
 
 	write(time_string, '(f4.2)') t
 
 	! open outputfile
 	open(unit=20, file = pre_string//"-"//trim(recon)//"-"//				&
-							 trim(tint)//"-"//trim(init)//"t="//				&
+							 trim(tint)//"-"//trim(init)//"-t="//				&
 							 time_string//".dat",								&
 							 status="unknown", access="append")
 
@@ -242,8 +244,8 @@ subroutine conv_test(max_expo, ngcells, t_wo, inittype, recontype,			&
 
 	double precision, intent(in) :: t_wo
 	
-	character(len=*), optional, intent(in) :: folder
-	
+    	character(len=*), intent(in) :: folder
+
 	integer :: expo
 	integer :: ncells	
 	
@@ -253,6 +255,7 @@ subroutine conv_test(max_expo, ngcells, t_wo, inittype, recontype,			&
 	
 	double precision, dimension(:), allocatable :: grid, phi, phi_left, phi_right, flux, phi_init
   
+
 	do expo=4, max_expo
 
 		ncells = 2**expo
@@ -281,13 +284,9 @@ subroutine conv_test(max_expo, ngcells, t_wo, inittype, recontype,			&
 
 			! write out data
 			if (t == 1.d0 .or. mod(t,t_wo) == 0) then
-				if (present(folder)) then
-					call conv_test_output(ncells, ngcells, phi, phi_init, t, inittype, &
+			call conv_test_output(ncells, ngcells, phi, phi_init, inittype, &
 													recontype, limiter, dttype, folder)
-				else 
-					call conv_test_output(ncells, ngcells, phi, phi_init, t, inittype, &
-													recontype, limiter, dttype)
-				end if
+			
 			end if
 		end do 
 	end do
@@ -322,28 +321,20 @@ end subroutine get_alpha
 !-------------------------+
 ! output: writes out data |
 !-------------------------+
-subroutine output(ncells, ngcells, inittype, recontype, limiter, dttype , t,	&
- 																grid, phi, folderin)
+subroutine output(ncells, ngcells, inittype, recontype, limiter, dttype ,	&
+ 																grid, phi, folder)
 	
+	use parameters
 	implicit none
 
 	integer, intent(in) :: ncells, ngcells
 	integer, intent(in) :: inittype, recontype, limiter, dttype
 	
-	double precision, intent(in) :: t
-	
 	double precision, dimension(2*ngcells+ncells), intent(in) :: grid, phi
 
-	character(len=*), optional, intent(in) :: folderin
-	character(len=*) :: folder
+	character(len=*), intent(in) :: folder
 	
-	if (present(folderin)) then
-		folder=folderin
-	else
-		folder=""
-	end if
-	
-	character(len=80) :: pre_string
+	character(len=100) :: pre_string
 	character(len=4)  :: time_string
 	character(len=16) :: recon, init, res, tint
 
