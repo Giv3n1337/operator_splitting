@@ -96,14 +96,14 @@ program OperatorSplitting
         do li = 1, 3
 					! loop over rk2 methods
           do dtt = 1, 3
-            cn= 0.8d0
+            cn= 0.1d0
             tmax = 100.0d0
             call conv_test(max_exp, ngcells, t_wo, it, rt, li, dtt)
           end do
         end do
       else
         do dtt = 1, 3
-          cn = 0.8d0
+          cn = 0.1d0
           tmax = 100.0d0
           call conv_test(max_exp, ngcells, t_wo, it, rt, 1, dtt)
         end do
@@ -227,7 +227,7 @@ subroutine conv_test_output(ncells, ngcells, phi, phi_init, inittype, &
 
 	! calc error
   err = sum(abs(phi(imin:imax) - phi_init(imin:imax))) / dble(ncells)
-
+    
   ! write out
   write(20,*) ncells, err
 
@@ -257,6 +257,10 @@ subroutine conv_test(max_expo, ngcells, t_wo, inittype, recontype, limiter, &
   integer :: wo_counter
   integer :: n
 
+  ! debugging
+  !logical :: conservation_check
+  !character(len=1) status
+
   double precision :: dx, dt
   double precision :: alpha
   double precision, parameter :: u = 1.d0
@@ -284,7 +288,8 @@ subroutine conv_test(max_expo, ngcells, t_wo, inittype, recontype, limiter, &
     call init(ncells, ngcells, inittype, grid, phi)
 
     ! initial variables
-    phi_init = phi
+    phi_init = phi   
+  
     t = 0.d0
     wo_counter = 0
 
@@ -292,13 +297,14 @@ subroutine conv_test(max_expo, ngcells, t_wo, inittype, recontype, limiter, &
 
 			! solve advection
       call RK2(ncells, ngcells, phi, alpha, dt, dx, u, recontype, limiter)
-
-			! update time
+ 
       t = t + dt
 
  			! write out data
       if (abs(t-1.d0) < 1.0e-5  .or. abs(t-t_wo*wo_counter) < 1.0e-5) then
-        call conv_test_output(ncells, ngcells, phi, phi_init, inittype, &
+      
+
+       call conv_test_output(ncells, ngcells, phi, phi_init, inittype, &
           recontype, limiter, dttype)
           wo_counter = wo_counter + 1
       end if
@@ -475,8 +481,8 @@ subroutine init(ncells, ngcells, inittype, grid, phi)
   if (inittype == 1) then
 	   ! gaussian
      do i = imin, imax
-       phi(i) = 1.d0/sqrt(2.d0*pi*0.1d0**2) +  &
-        exp(-(grid(i)- 0.5d0)**2/(2.d0*0.1d0**2))
+       phi(i) = 1.d0 / (0.1d0 * sqrt(2.d0*pi)) *    &
+        exp(-0.5d0 * ((grid(i)- 0.5d0)/(0.1d0))**2)
      end do
 
     else if(inittype == 2) then
@@ -673,7 +679,7 @@ subroutine fluxes_adv(ncells, ngcells, u, phi_left, phi_right, flux)
 
 	! loop over all interfaces and calculate the linear advective flux.
 	! the advection  velocity tells us which direction is upwind.
-  if (u <= 0.d0) then
+  if (u >= 0.d0) then
     do i = imin, imax+1
       flux(i) = u*phi_left(i)
     end do
@@ -681,7 +687,6 @@ subroutine fluxes_adv(ncells, ngcells, u, phi_left, phi_right, flux)
     do i = imin, imax+1
       flux(i) = u*phi_right(i)
     end do
-
   end if
 
   return
@@ -760,34 +765,35 @@ subroutine RK2(ncells, ngcells, phi, alpha, dt, dx, u, recontype, limiter)
     dt = (tmax - t)
   end if
 
-  WRITE(*,*) k_1
-  WRITE(*,*) phi
+  !WRITE(*,*) k_1
+  !WRITE(*,*) phi
   k_2_init(imin:imax) = phi(imin:imax) + alpha*dt*k_1(imin:imax)
 
-  WRITE(*,*) k_2_init
+  !WRITE(*,*) k_2_init
 
   call update_gcells(ncells, ngcells, k_2_init)
   call rhs_adv_timestep(ncells, ngcells, k_2_init, k_2, dt, dx, u, recontype, &
     limiter, 0)
 
-  WRITE(*,*) k_2
+  !WRITE(*,*) k_2
 
   phi(imin:imax) = phi(imin:imax) + dt*( (1.d0-1.d0/(2.d0*alpha))*k_1(imin:imax) &
     +1.d0/(2.d0*alpha) *k_2(imin:imax) )
 
-  WRITE(*,*) phi
+  !WRITE(*,*) phi
 
   return
 end subroutine RK2
 
 
-!=================================================================================
-! Functions
-!=================================================================================
 
-!---------------------------------------------------------------------------------
+!===============================================================================
+! Functions
+!===============================================================================
+
+!-------------------------------------------------------------------------------
 ! Limiter Functions
-!---------------------------------------------------------------------------------
+!-------------------------------------------------------------------------------
 
 double precision function minmod(a,b)
 
@@ -823,3 +829,18 @@ double precision function maxmod(a,b)
 
     return
 end function maxmod
+
+! conseration check returns true or false
+
+logical function conservation_check(ncells, ngcells, phi, dx)
+
+  implicit none
+
+  integer, intent(in) :: ncells, ngcells
+  double precision, intent(in) :: dx
+
+  double precision, dimension(2*ngcells+ncells), intent(in) :: phi
+
+  conservation_check = abs(1.d0 - sum(phi)*dx) <= 1.0e-5
+
+end function conservation_check  
