@@ -98,16 +98,14 @@ program OperatorSplitting
           do dtt = 1, 3
             cn= 0.8d0
             tmax = 100.0d0
-            call conv_test(max_exp, ngcells, t_wo, it, rt, li, dtt,&
-											"/home/dave/Dokumente/master/operator_splitting/conv_tests/")
+            call conv_test(max_exp, ngcells, t_wo, it, rt, li, dtt)
           end do
         end do
       else
         do dtt = 1, 3
           cn = 0.8d0
           tmax = 100.0d0
-          call conv_test(max_exp, ngcells, t_wo, it, rt, 1, dtt, &
-											"/home/dave/Dokumente/master/operator_splitting/conv_tests/")
+          call conv_test(max_exp, ngcells, t_wo, it, rt, 1, dtt)
         end do
       end if
     end do
@@ -163,7 +161,7 @@ end program
 ! conv_test_output: writes out the error in 1/N * (phi(t) - phi_init)**2 |
 !------------------------------------------------------------------------+
 subroutine conv_test_output(ncells, ngcells, phi, phi_init, inittype, &
-  recontype, limiter, dttype, folder)
+  recontype, limiter, dttype)
 
   use parameters
   implicit none
@@ -173,13 +171,12 @@ subroutine conv_test_output(ncells, ngcells, phi, phi_init, inittype, &
 
   double precision, dimension(2*ngcells+ncells), intent(in) :: phi, phi_init
 
-  character(len=*), intent(in) :: folder
-
   double precision :: err
 
   character(len=6) :: time_string
   !character(len=4) :: res_string
-  character(len=300) :: pre_string
+  character(len=255) :: pwd
+  character(len=285) :: pre_string
   character(len=16) :: recon, init, tint
 
   integer :: imin, imax
@@ -216,8 +213,8 @@ subroutine conv_test_output(ncells, ngcells, phi, phi_init, inittype, &
     tint = "HEUN"
   end if
 
-
-  pre_string = trim(folder)//"conv_test"
+  call getcwd(pwd)
+  pre_string = trim(pwd)//"/conv_tests/conv_test"
 
 
   write(time_string, '(f6.2)') t
@@ -245,7 +242,7 @@ end subroutine conv_test_output
 ! conv_test :
 !
 subroutine conv_test(max_expo, ngcells, t_wo, inittype, recontype, limiter, &
-  dttype, folder)
+  dttype)
 
   use parameters
   implicit none
@@ -254,8 +251,6 @@ subroutine conv_test(max_expo, ngcells, t_wo, inittype, recontype, limiter, &
   integer, intent(in) :: inittype, recontype, limiter, dttype
 
   double precision, intent(in) :: t_wo
-
-  character(len=*), intent(in) :: folder
 
   integer :: expo
   integer :: ncells
@@ -304,7 +299,7 @@ subroutine conv_test(max_expo, ngcells, t_wo, inittype, recontype, limiter, &
  			! write out data
       if (abs(t-1.d0) < 1.0e-5  .or. abs(t-t_wo*wo_counter) < 1.0e-5) then
         call conv_test_output(ncells, ngcells, phi, phi_init, inittype, &
-          recontype, limiter, dttype, folder)
+          recontype, limiter, dttype)
           wo_counter = wo_counter + 1
       end if
     end do
