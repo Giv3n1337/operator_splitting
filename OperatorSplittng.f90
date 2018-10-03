@@ -85,31 +85,39 @@ program OperatorSplitting
 
 	! CONVERGENCE TEST
 
+  it   = 0 !test !1 gaussian
+  rt   = 1 !gudonov
+  dtt  = 1 !alpha = 2/3
+  cn   = 0.25d0
+  tmax = 1.d0
 
+
+
+  call conv_test(max_exp, ngcells, t_wo, it, rt, li ,dtt, 1)
 
 	! try gaussian and square wave
-  do it = 1, 3, 2
-		! loop over reconstruction types
-    do rt = 1, 2
-			! if plm loop over limiter
-      if (rt == 2) then
-        do li = 1, 3
-					! loop over rk2 methods
-          do dtt = 1, 3
-            cn= 0.1d0
-            tmax = 100.0d0
-            call conv_test(max_exp, ngcells, t_wo, it, rt, li, dtt)
-          end do
-        end do
-      else
-        do dtt = 1, 3
-          cn = 0.1d0
-          tmax = 100.0d0
-          call conv_test(max_exp, ngcells, t_wo, it, rt, 1, dtt)
-        end do
-      end if
-    end do
-  end do
+  ! do it = 1, 3, 2
+	! 	! loop over reconstruction types
+  !   do rt = 1, 2
+	! 		! if plm loop over limiter
+  !     if (rt == 2) then
+  !       do li = 1, 2 !3
+	! 				! loop over rk2 methods
+  !         do dtt = 1, 3
+  !           cn= 0.8d0
+  !           tmax = 1.0d0
+  !           call conv_test(max_exp, ngcells, t_wo, it, rt, li, dtt, 0)
+  !         end do
+  !       end do
+  !     else
+  !       do dtt = 1, 3
+  !         cn = 0.8d0
+  !         tmax = 1.0d0
+  !         call conv_test(max_exp, ngcells, t_wo, it, rt, 1, dtt, 0)
+  !       end do
+  !     end if
+  !   end do
+  ! end do
 
 	! setup grid and initial conditions
 !	call get_alpha(alpha, dttype)
@@ -161,7 +169,7 @@ end program
 ! conv_test_output: writes out the error in 1/N * (phi(t) - phi_init)**2 |
 !------------------------------------------------------------------------+
 subroutine conv_test_output(ncells, ngcells, phi, phi_init, inittype, &
-  recontype, limiter, dttype)
+  recontype, limiter, dttype, lasterr)
 
   use parameters
   implicit none
@@ -172,12 +180,14 @@ subroutine conv_test_output(ncells, ngcells, phi, phi_init, inittype, &
   double precision, dimension(2*ngcells+ncells), intent(in) :: phi, phi_init
 
   double precision :: err
+  double precision, intent(inout) :: lasterr
 
   character(len=6) :: time_string
   !character(len=4) :: res_string
   character(len=255) :: pwd
   character(len=285) :: pre_string
-  character(len=16) :: recon, init, tint
+  character(len=16) :: recon, tint
+  character(len=16) :: init = "test"
 
   integer :: imin, imax
 
@@ -226,10 +236,16 @@ subroutine conv_test_output(ncells, ngcells, phi, phi_init, inittype, &
     status="unknown", position="append")
 
 	! calc error
-  err = sum(abs(phi(imin:imax) - phi_init(imin:imax))) / dble(ncells)
-    
+  err = sum(abs(phi(imin:imax) - phi_init(imin:imax)))
+
   ! write out
-  write(20,*) ncells, err
+  if (lasterr > 0.d0) then
+    write(20,*) ncells, err, log(err / lasterr) / log(2.d0)
+  else
+    write(20,*) ncells, err
+  end if
+
+  lasterr = err
 
 	! close file
   close(20)
@@ -242,13 +258,13 @@ end subroutine conv_test_output
 ! conv_test :
 !
 subroutine conv_test(max_expo, ngcells, t_wo, inittype, recontype, limiter, &
-  dttype)
+  dttype, states)
 
   use parameters
   implicit none
 
   integer, intent(in) :: max_expo, ngcells
-  integer, intent(in) :: inittype, recontype, limiter, dttype
+  integer, intent(in) :: inittype, recontype, limiter, dttype, states
 
   double precision, intent(in) :: t_wo
 
@@ -264,10 +280,10 @@ subroutine conv_test(max_expo, ngcells, t_wo, inittype, recontype, limiter, &
   double precision :: dx, dt
   double precision :: alpha
   double precision, parameter :: u = 1.d0
+  double precision :: lasterr = -1.d0
 
   double precision, dimension(:), allocatable :: grid, phi, phi_left, phi_right, &
     flux, phi_init
-
 
   do expo=4, max_expo
 
@@ -288,24 +304,36 @@ subroutine conv_test(max_expo, ngcells, t_wo, inittype, recontype, limiter, &
     call init(ncells, ngcells, inittype, grid, phi)
 
     ! initial variables
-    phi_init = phi   
-  
+    phi_init = phi
+
     t = 0.d0
     wo_counter = 0
+
+    ! write out initial state
+    if (states == 1) then
+      call  output(ncells, ngcells, inittype, recontype, limiter, dttype , &
+        grid, phi)
+    end if
 
     do while (t < tmax)
 
 			! solve advection
       call RK2(ncells, ngcells, phi, alpha, dt, dx, u, recontype, limiter)
- 
+
       t = t + dt
+
+      ! write out states
+      if (states == 1) then
+        call  output(ncells, ngcells, inittype, recontype, limiter, dttype , &
+          grid, phi)
+      end if
 
  			! write out data
       if (abs(t-1.d0) < 1.0e-5  .or. abs(t-t_wo*wo_counter) < 1.0e-5) then
-      
+
 
        call conv_test_output(ncells, ngcells, phi, phi_init, inittype, &
-          recontype, limiter, dttype)
+          recontype, limiter, dttype, lasterr)
           wo_counter = wo_counter + 1
       end if
     end do
@@ -325,7 +353,7 @@ end subroutine conv_test
 
 
 !-------------------------------------------------------+
-! get_alpha: set alpha, depending on choosen RK2 Method |
+! get_alpha: set alpha, depending on choosen RK2 Method |x
 !-------------------------------------------------------+
 subroutine get_alpha(alpha, dttype)
 
@@ -350,7 +378,7 @@ end subroutine get_alpha
 ! output: writes out data |
 !-------------------------+
 subroutine output(ncells, ngcells, inittype, recontype, limiter, dttype , grid, &
-  phi, folder)
+  phi)
 
   use parameters
   implicit none
@@ -360,11 +388,11 @@ subroutine output(ncells, ngcells, inittype, recontype, limiter, dttype , grid, 
 
   double precision, dimension(2*ngcells+ncells), intent(in) :: grid, phi
 
-  character(len=*), intent(in) :: folder
-
-  character(len=100) :: pre_string
-  character(len=4)  :: time_string
-  character(len=16) :: recon, init, res, tint
+  character(len=255) :: pwd
+  character(len=265) :: pre_string
+  character(len=7)  :: time_string
+  character(len=16) :: recon, res, tint
+  character(len=16) :: init = "test"
 
   integer :: i, imin, imax
 
@@ -401,14 +429,15 @@ subroutine output(ncells, ngcells, inittype, recontype, limiter, dttype , grid, 
   end if
 
 	! open output file
-  write(time_string, '(f4.2)') t
+  write(time_string, '(f7.3)') t
   write(res, '(i8)') ncells
 
-  pre_string=trim(folder)//"/AdvDiff"
+  call getcwd(pwd)
+  pre_string=trim(pwd)//"/states/adv"
 
-  open(unit=20, file = pre_string//"-Strang-"//trim(recon)//"-"// &
-    trim(tint)//"+CN-"//trim(init)//"-ncells="//  &
-    trim(adjustl(res))//"-t="//time_string,       &
+  open(unit=20, file = trim(pre_string)//"-"//trim(recon)//"-"//  &
+    trim(tint)//"-"//trim(init)//"-ncells="//                     &
+    trim(adjustl(res))//"-t="//trim(adjustl(time_string))//".dat",&
     status="unknown")
 
   do i = imin, imax
@@ -500,6 +529,11 @@ subroutine init(ncells, ngcells, inittype, grid, phi)
         phi(i) = 0.d0
       end if
     end do
+
+  else if (inittype == 0) then
+  ! test example
+  phi(:) = 0.d0
+  phi(imin) = 1.0d0
 
   end if
 
@@ -627,7 +661,7 @@ subroutine reconstruct(ncells, ngcells, dx, dt, u, recontype, limiter, &
       ! PLM with TVD limiter (Total Variation Diminishing)
     else if (limiter == 3) then
 
-      do i = imin-1, imax+1
+      do i = imin, imax
         ! called dx*u in paper
         slope(i) = max( ((phi(i+1) - phi(i)) * (phi(i) - phi(i-1) )), 0.d0) / &
           (phi(i+1) - phi(i-1))
@@ -703,7 +737,8 @@ subroutine rhs_adv_timestep(ncells, ngcells, init, res, dt, dx, u, recontype, &
 
   integer, intent(in) :: ncells, ngcells, update, recontype, limiter
 
-  double precision, dimension(2*ngcells +ncells), intent(inout) :: init, res
+  double precision, dimension(2*ngcells + ncells), intent(inout) :: res
+  double precision, dimension(2*ngcells + ncells), intent(in) :: init
   double precision, intent(inout) :: dt
   double precision, intent(in) :: dx, u
 
@@ -761,6 +796,7 @@ subroutine RK2(ncells, ngcells, phi, alpha, dt, dx, u, recontype, limiter)
   call update_gcells(ncells, ngcells, phi)
   call rhs_adv_timestep(ncells, ngcells, phi, k_1, dt, dx, u, recontype, &
     limiter, 1)
+
   if (t + dt > tmax) then
     dt = (tmax - t)
   end if
@@ -769,7 +805,7 @@ subroutine RK2(ncells, ngcells, phi, alpha, dt, dx, u, recontype, limiter)
   !WRITE(*,*) phi
   k_2_init(imin:imax) = phi(imin:imax) + alpha*dt*k_1(imin:imax)
 
-  !WRITE(*,*) k_2_init
+  WRITE(*,*) k_2_init
 
   call update_gcells(ncells, ngcells, k_2_init)
   call rhs_adv_timestep(ncells, ngcells, k_2_init, k_2, dt, dx, u, recontype, &
@@ -778,7 +814,7 @@ subroutine RK2(ncells, ngcells, phi, alpha, dt, dx, u, recontype, limiter)
   !WRITE(*,*) k_2
 
   phi(imin:imax) = phi(imin:imax) + dt*( (1.d0-1.d0/(2.d0*alpha))*k_1(imin:imax) &
-    +1.d0/(2.d0*alpha) *k_2(imin:imax) )
+    + (1.d0/(2.d0*alpha)) * k_2(imin:imax) )
 
   !WRITE(*,*) phi
 
@@ -830,8 +866,8 @@ double precision function maxmod(a,b)
     return
 end function maxmod
 
-! conseration check returns true or false
 
+! conseration check returns true or false
 logical function conservation_check(ncells, ngcells, phi, dx)
 
   implicit none
@@ -843,4 +879,4 @@ logical function conservation_check(ncells, ngcells, phi, dx)
 
   conservation_check = abs(1.d0 - sum(phi)*dx) <= 1.0e-5
 
-end function conservation_check  
+end function conservation_check
