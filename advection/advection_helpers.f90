@@ -31,6 +31,7 @@ module advection_helper
       !                    char while reading a line. [default = .false.] 
       ! Output:
       !  TODO: <-- write output param.
+     
       implicit none
       
       character(len=*), intent(in)  :: fname
@@ -91,7 +92,8 @@ module advection_helper
       ! Input:
       !  folder  -  output folder,
       !  suffix  -  optional, controls data type [default = dat]
-    	implicit none
+    	
+      implicit none
     
       character(len=:), allocatable, intent(in)    :: folder
       character(len=4), optional,    intent(inout) :: suffix
@@ -169,6 +171,7 @@ module advection_helper
       !  folder      -  output folder,
       !  init_state  -  initital state,  
       !  suffix      -  optional, controls the data type [default = dat].
+      
       implicit none
     
       character(len=:), allocatable, intent(in)    :: folder
@@ -232,6 +235,7 @@ module advection_helper
       !  creates a backup file incase the program crashes while writing out.
       ! Input:
       !  fname  -  filename. 
+      
       implicit none
     
       character(len=*), intent(in) :: fname
@@ -261,7 +265,32 @@ module advection_helper
       call bar%update(current=time)
     end subroutine show_progress
 
+    
+    subroutine cfl_crit(dt, a)
+      ! Task:
+      !  calculate the next time step. (using global cfl number)
+      ! Input:
+      !  a  - array of current propagation speeds.
+      ! Output:
+      !  dt - next time step. 
+      
+      implicit none
+
+      real(dp), intent(inout) :: dt
+      real(dp), dimension(:), intent(in) :: a 
+      
+      dt = cfl / sqrt( ((max(abs(a))) * ncells)**2 ) 
+      
+      if ( dt > dt_max ) then
+        dt = dt_max
+      end if 
+
+      if ( time + dt > time_end ) then
+        dt = time_end - time
+      end if
+    end subroutine cfl_crit
 
     
+
 
 end module advection_helper
