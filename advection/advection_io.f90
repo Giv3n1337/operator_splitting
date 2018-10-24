@@ -246,7 +246,15 @@ module advection_io
       write(*,*) 'ERROR: file' // trim(fullname(fname)) // ' does not exist.'
       return
     end subroutine backup
-    
+
+
+    subroutine start_progress()
+      ! Task: 
+      !   starts progress bar.
+      implicit none
+
+      call bar%start()
+    end subroutine start_progress()      
 
     subroutine show_progress()
       ! Task:
