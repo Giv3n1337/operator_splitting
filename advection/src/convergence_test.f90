@@ -70,10 +70,11 @@ module advection_io
       integer :: open_stat, read_stat
 
       ! dummy character (description of a value to read in)
-      character(len=:), allocatable :: desc
+      character(len=8) :: desc
 
       ! dummy index
       integer :: i
+
 
       open(unit=20, file=fullname(fname), status='old', &
         action='read', form='formatted', iostat=open_stat)
@@ -116,7 +117,7 @@ module advection_io
 
 
 
-    subroutine write_state(state, folder, suffix)
+    subroutine write_state(state, folder, suffix_in)
       ! Task:
       !  writes actual state into folder 'folder'.
       ! Input:
@@ -128,8 +129,8 @@ module advection_io
 
       real(dp), dimension(2*ngcells+ncells), intent(in) :: state
 
-      character(len=:), allocatable, intent(in)    :: folder
-      character(len=4), optional,    intent(inout) :: suffix
+      character(len=:), allocatable, intent(in) :: folder
+      character(len=4), optional,    intent(in) :: suffix_in
 
 
       ! io stat
@@ -140,6 +141,7 @@ module advection_io
       character(len=255) :: fname
       character(len=7)   :: time_str
       character(len=4)   :: reso_str
+      character(len=4)   :: suffix = 'dat '
 
       ! dummy
       integer :: i
@@ -150,17 +152,16 @@ module advection_io
         call system('mkdir '//fullname(folder))
       end if
 
-      if (present(suffix)) then
-        suffix = suffix
-      else
-        suffix = 'dat'
+      if (present(suffix_in)) then
+        suffix = suffix_in
       end if
 
-      write(time_str, '(f7.2)') time
+      write(time_str, '(f7.4)') time
       write(reso_str, '(I4)') ncells
 
-      fname = fullname(folder) // 'advection_n=' // reso_str // '_t=' // &
-        time_str // '.' // trim(suffix)
+      fname = trim(fullname(folder)) // '/' //'advection_n-' // &
+        trim(adjustl(reso_str)) // '_t-' // trim(adjustl(time_str)) // &
+        '.' // adjustl(suffix)
 
       ! open file
       open(unit=20, file=fname, status='replace', action='write', &
@@ -415,7 +416,7 @@ module convergence_helpers
         empty_char_string=' ',              &
         add_progress_percent=.true.,        &
         progress_percent_color_fg='red',    &
-        max_value=tend+0.05013_dp)          ! <-TODO:find better way
+        max_value=tend+0.05019_dp)          ! <-TODO:find better way
 
     end subroutine initialize
 
@@ -627,8 +628,12 @@ module reconstruction
       real(dp) :: ds
 
       ! van leer TVD limiter
-      ds = max( (state(i+1)-state(i)) * (state(i)-state(i-1)), 0.0_dp )
-      ds = ds / (state(i+1) - state(i-1))
+      if ( abs(state(i+1) - state(i-1)) > 1d-12 ) then
+        ds = max( (state(i+1)-state(i)) * (state(i)-state(i-1)), 0.0_dp )
+        ds = ds / (state(i+1) - state(i-1))
+      else 
+        ds = 0.0_dp
+      end if
     end function delta_state_van_leer
 
 end module reconstruction
@@ -821,6 +826,9 @@ program conv_test
   !   dt   - current time step
   real(dp) :: dt
 
+  ! stat
+  integer :: delstat
+
   ! dummy variable 
   integer :: i
 
@@ -829,7 +837,7 @@ program conv_test
     call getarg(1, arg1)
     folder = arg1
   else
-    folder = "."
+    folder = fullname(".")
   end if
 
   !*******************
@@ -854,7 +862,7 @@ program conv_test
   write(*,'(A,F13.4)')  '    velocity:              ', vel
 
   ! loop over resplutions
-  do i = 1, 8
+  do i = 1, 9
 
     ! improve resolution
     if (i > 1) then
@@ -892,6 +900,12 @@ program conv_test
 
       time = time + dt
 
+      ! test purpose
+      !if ( write_cond(time, dt_max, 1.0d-10) ) then
+      !  call write_state(state, folder)
+      !end if
+
+
       if ( write_cond(time, t_wo, 1.0d-15) ) then
          call write_conv(state, state_ini, folder)
       end if
@@ -905,7 +919,11 @@ program conv_test
 
   end do
 
-  call system('rm '//trim(folder)//'*.bak')
+  call system('rm '//trim(folder)//'*.bak', delstat)
+  if (delstat /= 0) then
+    call system('rm '//trim(folder)//'/*.bak')
+  end if
+
 
   write(*,*) '============================================================'
   write(*,*) color(' CONVERGENCE TEST SUCCESSFULLY DONE!', 'green')
