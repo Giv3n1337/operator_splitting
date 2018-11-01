@@ -1,6 +1,6 @@
 ncells      32
 ngcells     2
 time_end    10.0
-dt_max      0.05
-cfl         0.8
+dt_max      0.015625
+cfl         0.5
 velocity    1.0

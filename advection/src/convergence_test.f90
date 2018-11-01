@@ -34,9 +34,9 @@ module globals
 
 end module globals
 
-!*******************************************************************************
+!******************************************************************************
 ! MODULE ADVECTION_IO: io for advection module
-!*******************************************************************************
+!******************************************************************************
 module advection_io
   use io_helpers
   use globals
@@ -51,12 +51,12 @@ module advection_io
     ! methods
     subroutine read_param(fname, hl, skip_first_char)
       ! Task:
-      !  read initial values from file.
+      !   read initial values from file.
       ! Input:
-      !  fname - file name,
-      !  hl    - optional, amount of header lines to skip,
-      !  skip_first_char - optional, logical parameter, if .true. skips first
-      !                    char while reading a line. [default = .false.]
+      !   fname - file name,
+      !   hl    - optional, amount of header lines to skip,
+      !   skip_first_char - optional, logical parameter, if .true. skips first
+      !                     char while reading a line. [default = .false.]
       ! Output:
       !  TODO: <-- write output param.
 
@@ -102,7 +102,7 @@ module advection_io
         ! skip header descripstion and read value line
         else
           read(20,*) ncells, ngcells, tend, dt_max, cfl, vel
-         end if
+        end if
 
       ! error opening file
       else
@@ -222,22 +222,18 @@ module advection_io
       character(len=:), allocatable :: fname
       character(len=7)   :: time_str
 
-      ! dummy
-      integer :: i
-
       suffix = 'dat '
       
       if (present(suffix_in)) then
         suffix = suffix_in
       end if
 
-      inquire(file = fullname(folder), exist=ex)
+      inquire(file=fullname(folder), exist=ex)
       if (.not. ex) then
-        call system('mkdir '//fullname(folder))
+        call system('mkdir '//trim(fullname(folder)))
       end if
 
       write(time_str, '(f7.2)') time
-      !path = trim(fullname(folder))
 
       fname = trim(fullname(folder)) // '/' // &
         'advection_conv_test_' // 't-' &
@@ -315,7 +311,7 @@ module advection_io
       ! Task:
       !   terminates the progress bar.
       implicit none
-
+      call bar%update(current=time+0.05013_dp)
       call bar%destroy
     end subroutine end_progress
 
@@ -372,14 +368,14 @@ module convergence_helpers
       !   state     - state vector
       !   state_ini - initial state vector
       ! Outout:
-      !   state     - state vector           -> fill
-      !   state_ini - initial state vector   -> alloc
-      !   dx        - grid size              -> calc
-      !   dt        - time steps             -> set dt_max
-      !   time      - current time           -> set 0.0
-      !   t_wo      - write out time         -> calc
-      !   PHYmax    - max index phys. domain -> calc
-      !   PHYmin    - min index phys. domain -> calc
+      !   state     - state vector            -> fill
+      !   state_ini - initial state vector    -> alloc
+      !   dx        - grid size               -> calc
+      !   dt        - time steps              -> set dt_max
+      !   time      - current time            -> set 0.0
+      !   t_wo      - write out time          -> calc
+      !   PHYmax    - max index phys. domain  -> calc
+      !   PHYmin    - min index phys. domain  -> calc
 
       implicit none
 
@@ -396,14 +392,14 @@ module convergence_helpers
       call initialize_param(state, state_ini, dt)
 
       ! set initial condition
-      do i = PHYmin, PHYmax
-        state(i) = 1.d0 / (0.25d0*sqrt(2.0d0*pi)) * &  ! Gaussian
-          exp( -0.5d0*( (i - 0.5d0) / (0.25d0) )**2 )
+      do i = 1, ncells
+        state(ngcells+i) = 1.d0 / (0.25d0*sqrt(2.0d0*pi)) * &  ! Gaussian
+          exp( -0.5d0*( (i*dx - 0.5d0*dx - 0.5d0) / (0.25d0))**2 ) 
 
-        ! if (i <= 0.25d0 .or. i >= 0.75d0) then       ! Square
-        !   state(i) = 0.0_dp
+        ! if (i <= 0.25d0*ncells .or. i >= 0.75d0*ncells) then       ! Square
+        !   state(ngcells+i) = 0.0_dp
         ! else
-        !   state(i) = 2.0d0
+        !   state(ngcells+i) = 2.0d0
         ! end if
       end do
 
@@ -419,7 +415,7 @@ module convergence_helpers
         empty_char_string=' ',              &
         add_progress_percent=.true.,        &
         progress_percent_color_fg='red',    &
-        max_value=tend)
+        max_value=tend+0.05013_dp)          ! <-TODO:find better way
 
     end subroutine initialize
 
@@ -484,7 +480,7 @@ module basic_helpers
   private
 
   ! pulbic methods
-  !public :: calc_dt      <- TODO: not needed atm.
+  public :: update_dt     ! update_dt(dt, const_dt) 
   public :: boundaries    ! boundaries(array)
 
   interface boundaries
@@ -533,6 +529,38 @@ module basic_helpers
     end subroutine boundaries_nD
 
 
+
+    subroutine update_dt(dt, const_dt)
+      ! Task:
+      !   generates new timestep depending on cfl criterion.
+      !      -  if dt > dt_max       =>  dt = dt_max.
+      !      -  if const_dt == 1     =>  dt = st_max.
+      !      -  if time + dt > tend  =>  dt = tend - time.   
+      ! Input:
+      !   dt - last time step,
+      !   const_dt - indicator: dynamic or constant time steps,
+      !   last_dt  - logical to prevent endless loop.
+      ! Output:
+      !   dt - new time step.
+    
+      implicit none
+    
+        real(dp), intent(inout) :: dt
+        integer,  intent(in)    :: const_dt
+      
+      if (const_dt == 0) then
+        dt = cfl * dx / vel
+      else 
+        dt = dt_max
+      end if
+
+      if ( (time + dt > tend) .and. (time < tend) ) then
+        dt = tend - time
+      end if
+
+    end subroutine update_dt
+    
+
 end module basic_helpers
 
 
@@ -571,14 +599,11 @@ module reconstruction
       real(dp), dimension(2*ngcells+ncells),   intent(in)    :: state
       real(dp), dimension(2*ngcells+ncells,2), intent(inout) :: interfaces
 
-      real(dp) :: delta_state
-
       ! dummy variable
       integer :: i
 
       ! fill interface values
       do i = PHYmin, PHYmax
-          delta_state = delta_state_van_leer(state, i)
 
           ! left/west interface
           interfaces(i,1) = state(i) - delta_state_van_leer(state, i)
@@ -602,7 +627,7 @@ module reconstruction
       real(dp) :: ds
 
       ! van leer TVD limiter
-      ds = max( (state(i+1)-state(i)) * (state(i)-state(i-1) ), 0.0_dp )
+      ds = max( (state(i+1)-state(i)) * (state(i)-state(i-1)), 0.0_dp )
       ds = ds / (state(i+1) - state(i-1))
     end function delta_state_van_leer
 
@@ -699,7 +724,6 @@ module right_hand_side
 
       ! calculating rhs
       res(:) = (fluxes(PHYmin:PHYmax) - fluxes(PHYmin+1:PHYmax+1)) / dx
-
     end subroutine rhs
 
 end module right_hand_side
@@ -712,7 +736,7 @@ end module right_hand_side
 !******************************************************************************
 module runge_kutta
   use globals
-  use basic_helpers, only: boundaries
+  use basic_helpers, only: boundaries, update_dt
   use right_hand_side
 
   implicit none
@@ -751,12 +775,9 @@ module runge_kutta
       call boundaries(state)
 
       ! runge-kutta steps
-      if (const_dt == 0) then
-        !call update_dt         <- TODO: write method 
-        call rhs(state, k2)
-      else
-        call rhs(state, k2)
-      end if
+      call update_dt(dt, const_dt)
+      call rhs(state, k2)
+     
 
       k1(PHYmin:PHYmax) = state(PHYmin:PHYmax) + dt*k2
 
@@ -808,7 +829,7 @@ program conv_test
     call getarg(1, arg1)
     folder = arg1
   else
-    folder = fullname('.')
+    folder = "."
   end if
 
   !*******************
@@ -825,20 +846,20 @@ program conv_test
   call info( "  reading in parameters from 'parameters.txt'")
   call read_param('parameters.txt', skip_first_char=.true.)
   call end_info()
-  write(*,'(A,I10.1)')  '    amount of cells:       ', ncells
-  write(*,'(A,I10.1)')  '    amount of ghost cells: ', ngcells
-  write(*,'(A,F10.3)')  '    maximal time:          ', tend
-  write(*,'(A,F10.3)')  '    maximal timestep:      ', dt_max
-  write(*,'(A,F10.3)')  '    cfl number:            ', cfl
-  write(*,'(A,F10.3)')  '    velocity:              ', vel
-
+  write(*,'(A,I13.1)')  '    amount of cells:       ', ncells
+  write(*,'(A,I13.1)')  '    amount of ghost cells: ', ngcells
+  write(*,'(A,F13.4)')  '    maximal time:          ', tend
+  write(*,'(A,F13.4)')  '    maximal timestep:      ', dt_max
+  write(*,'(A,F13.4)')  '    cfl number:            ', cfl
+  write(*,'(A,F13.4)')  '    velocity:              ', vel
 
   ! loop over resplutions
-  do i = 1, 9
+  do i = 1, 8
 
     ! improve resolution
     if (i > 1) then
-      ncells = ncells*2
+      ncells =     2 * ncells
+      dt_max = 0.5d0 * dt_max
     end if
 
     write(*,*) '============================================================'
@@ -846,7 +867,7 @@ program conv_test
     write(*,*) '============================================================'
 
     if (allocated(state)) then
-      call info( "  deallocating previously used 'state' arrays")
+      call info( "  deallocating old 'state' arrays")
       deallocate(state, state_ini)
       call end_info()
     end if
@@ -861,26 +882,30 @@ program conv_test
 
     write(*,*) ''
     write(*,*) ' start integration:'
+    
     ! integration
     call start_progress()
 
-    do while (time <= tend)
+    do while (time < tend)
       call rk2(state, dt, 1)
       call show_progress()
-      
+
       time = time + dt
-      
-      if ( write_cond(time, t_wo, 1.0d-13) ) then
+
+      if ( write_cond(time, t_wo, 1.0d-15) ) then
          call write_conv(state, state_ini, folder)
       end if
     end do
 
+    call end_progress()
+
     write(*,*) ''
     write(*,*) color('   Done!','green')
     write(*,*) ''
+
   end do
 
-  call system('rm '//trim(folder)//'/*.bak')
+  call system('rm '//trim(folder)//'*.bak')
 
   write(*,*) '============================================================'
   write(*,*) color(' CONVERGENCE TEST SUCCESSFULLY DONE!', 'green')
