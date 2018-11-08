@@ -966,7 +966,7 @@ program conv_test
       time = time + dt
 
       
-      if ( write_cond(time, dt_max, 1.0d-16) ) then
+      if ( write_cond(time, 10.0_dp*dt_max, 1.0d-16) ) then
         call write_state(state, folder2)
       end if
 
@@ -993,7 +993,9 @@ program conv_test
   call info('  calculating order of convergence')
   call system('python src/add_eoc.py '//trim(folder1))
   call end_info()
-  write(*,*) color(' CONVERGENCE TEST SUCCESSFULLY DONE!', 'green')
+  write(*,*) ''
+  write(*,*) color('   CONVERGENCE TEST SUCCESSFULLY DONE!', 'green')
+  write(*,*) ''
   write(*,*) '============================================================'
 
 end program conv_test
