@@ -23,13 +23,13 @@ module globals
   real(dp), parameter :: pi = 4.d0*datan(1.d0)
 
   ! floating point values
-  !   time   - current time
-  !   dt_max - maximal time step
-  !   tend   - maximal time
-  !   t_wo   - write out time
-  !   cfl    - cfl number
-  !   vel    - fuild velocity
-  !   dx     - cell size
+  !   time    - current time
+  !   dt_max  - maximal time step
+  !   tend    - maximal time
+  !   t_wo    - write out time
+  !   cfl     - cfl number
+  !   vel     - fuild velocity
+  !   dx      - cell size
   real(dp) :: time, dt_max, tend, cfl, vel, dx, t_wo
 
 end module globals
@@ -44,6 +44,15 @@ module advection_io
   implicit none
   save
 
+  ! integer values
+  !   runs - amount of runs: each run improves the resolution by a factor 2,
+  integer :: runs
+
+  ! floating point values
+  !   sig - standard deviation
+  real(dp) :: sig 
+
+  ! process bar
   type(bar_object) :: bar ! progress bar
 
   contains
@@ -100,9 +109,11 @@ module advection_io
           read(20,*) desc, dt_max
           read(20,*) desc, cfl
           read(20,*) desc, vel
+          read(20,*) desc, runs
+          read(20,*) desc, sig
         ! skip header descripstion and read value line
         else
-          read(20,*) ncells, ngcells, tend, dt_max, cfl, vel
+          read(20,*) ncells, ngcells, tend, dt_max, cfl, vel, runs, sig
         end if
 
       ! error opening file
@@ -119,11 +130,11 @@ module advection_io
 
     subroutine write_state(state, folder, suffix_in)
       ! Task:
-      !  writes actual state into folder 'folder'.
+      !   writes actual state into folder 'folder'.
       ! Input:
-      !  state   -  current state,
-      !  folder  -  output folder,
-      !  suffix  -  optional, controls data type [default = dat]
+      !   state   -  current state,
+      !   folder  -  output folder,
+      !   suffix  -  optional, controls data type [default = dat]
 
       implicit none
 
@@ -141,7 +152,7 @@ module advection_io
       character(len=255) :: fname
       character(len=7)   :: time_str
       character(len=4)   :: reso_str
-      character(len=4)   :: suffix = 'dat '
+      character(len=4)   :: suffix = 'txt '
 
       ! dummy
       integer :: i
@@ -149,7 +160,7 @@ module advection_io
 
       inquire(file = fullname(folder), exist=ex)
       if (.not. ex) then
-        call system('mkdir '//fullname(folder))
+        call system('mkdir -p '//fullname(folder))
       end if
 
       if (present(suffix_in)) then
@@ -197,15 +208,15 @@ module advection_io
     end subroutine write_state
 
 
-    subroutine write_conv(state, init_state, folder, suffix_in)
+    subroutine write_conv(state, init_state, folder, use_steps, suffix_in)
       ! Task:
-      !  writes out the number of cells 'ncells' and the error between initial
-      !  state and actual state.
+      !   writes out the number of cells 'ncells' and the error between initial
+      !   state and actual state.
       ! Input:
-      !  folder      -  output folder,
-      !  state       -  current state,
-      !  init_state  -  initital state,
-      !  suffix      -  optional, controls the data type [default = dat].
+      !   folder      -  output folder,
+      !   state       -  current state,
+      !   init_state  -  initital state,
+      !   suffix      -  optional, controls the data type [default = dat].
 
       implicit none
 
@@ -213,7 +224,13 @@ module advection_io
       character(len=:), allocatable, intent(in), optional :: suffix_in
       character(len=4)                                    :: suffix
 
+      logical, intent(in), optional :: use_steps
+      integer :: i
+
       real(dp), dimension(:), intent(in) :: init_state, state
+
+      ! error
+      real(dp) :: err
 
       ! io stat
       integer :: open_stat, write_stat
@@ -223,7 +240,7 @@ module advection_io
       character(len=:), allocatable :: fname
       character(len=7)   :: time_str
 
-      suffix = 'dat '
+      suffix = 'txt '
       
       if (present(suffix_in)) then
         suffix = suffix_in
@@ -231,15 +248,13 @@ module advection_io
 
       inquire(file=fullname(folder), exist=ex)
       if (.not. ex) then
-        call system('mkdir '//trim(fullname(folder)))
+        call system('mkdir -p '//trim(fullname(folder)))
       end if
 
       write(time_str, '(f7.2)') time
-
-      fname = trim(fullname(folder)) // '/' // &
-        'advection_conv_test_' // 't-' &
+      fname = trim(fullname(folder)) // 'advection_conv_test_' // 't-' &
         // trim(adjustl(time_str)) // '.' // adjustl(suffix)
-
+      
       ! open file
       inquire(file=fname, exist=ex)
       if (ex) then
@@ -248,13 +263,14 @@ module advection_io
       else
         open(unit=20, file=fname, status='new', &
           action='write', form='formatted', iostat=open_stat)
-      end if
-
-      ! write resolution, error
-      write(20,*,iostat=write_stat) ncells,  &
-        sum(abs(state(PHYmin:PHYmax) - init_state(PHYmin:PHYmax))) / &
+      end if  
+     
+      err = sum(abs(state(PHYmin:PHYmax) - init_state(PHYmin:PHYmax))) / &
         real(ncells,dp)
 
+      ! write resolution, error
+      write(20,*,iostat=write_stat) ncells, err
+ 
       ! close file
       close(20)
 
@@ -312,7 +328,7 @@ module advection_io
       ! Task:
       !   terminates the progress bar.
       implicit none
-      call bar%update(current=time+0.05013_dp)
+      call bar%update(current=time+0.0503_dp)
       call bar%destroy
     end subroutine end_progress
 
@@ -377,7 +393,7 @@ module convergence_helpers
       !   t_wo      - write out time          -> calc
       !   PHYmax    - max index phys. domain  -> calc
       !   PHYmin    - min index phys. domain  -> calc
-
+      
       implicit none
 
       ! floating point fields
@@ -394,11 +410,11 @@ module convergence_helpers
 
       ! set initial condition
       do i = 1, ncells
-        state(ngcells+i) = 1.d0 / (0.25d0*sqrt(2.0d0*pi)) * &  ! Gaussian
-          exp( -0.5d0*( (i*dx - 0.5d0*dx - 0.5d0) / (0.25d0))**2 ) 
+        state(ngcells+i) = 1.0_dp / (sig*sqrt(2.0_dp*pi)) * &     ! Gaussian
+          exp( -0.5_dp*( (i*dx - 0.5_dp*dx - 0.5_dp) / sig)**2 ) 
 
         ! if (i <= 0.25d0*ncells .or. i >= 0.75d0*ncells) then       ! Square
-        !   state(ngcells+i) = 0.0_dp
+        !   state(ngcells+i) = 0.0d0
         ! else
         !   state(ngcells+i) = 2.0d0
         ! end if
@@ -416,7 +432,7 @@ module convergence_helpers
         empty_char_string=' ',              &
         add_progress_percent=.true.,        &
         progress_percent_color_fg='red',    &
-        max_value=tend+0.05019_dp)          ! <-TODO:find better way
+        max_value=tend+0.0503_dp)          ! <-TODO:find better way
 
     end subroutine initialize
 
@@ -439,7 +455,7 @@ module convergence_helpers
       !   dt        - time steps             -> set dt_max
       !   PHYmax    - max index phys. domain -> calc
       !   PHYmin    - min index phys. domain -> calc
-
+      
       implicit none
 
       ! floating point fields
@@ -580,36 +596,71 @@ module reconstruction
   private
 
   ! public methods
+  public :: godunov
   public :: recon_lin_van_leer  ! paper ZIE04
 
   contains
 
     ! methods
+    subroutine godunov(state, interfaces)
+      ! Task:
+      !   cell state is constant.
+      ! Input:
+      !   state      - actual state,
+      !   interfaces - empty interfaces array. [dimension(:,2)]
+      ! Output:
+      !   interfaces - array containing left/right interface values.
+      !                [interfaces(:,1) ->  left: state_{i-1/2}]
+      !                [interfaces(:,2) -> right: state_{i+1/2}]
+
+      implicit none
+
+      real(dp), dimension(2*ngcells+ncells),   intent(in)    :: state
+      real(dp), dimension(2*ngcells+ncells,2), intent(inout) :: interfaces
+   
+      ! dummy
+      integer :: i
+
+      do i = 1,2
+        interfaces(:,i) = state(:)
+      end do
+
+      call boundaries(interfaces)
+    end subroutine godunov
+    
+
     subroutine recon_lin_van_leer(state, interfaces)
       ! Task:
       !   linear reconstruc left/right interfaces using van leer limiter.
       ! Input:
       !   state      - actual state,
       !   interfaces - empty interfaces array. [dimension(:,2)]
+      !   ds_i       - delta_state_van_leer for cell i
       ! Output:
       !   interfaces - array containing reconstructed interfaces.
       !                [interfaces(:,1) ->  left: state_{i-1/2}]
       !                [interfaces(:,2) -> right: state_{i+1/2}]
+  
       implicit none
 
       real(dp), dimension(2*ngcells+ncells),   intent(in)    :: state
       real(dp), dimension(2*ngcells+ncells,2), intent(inout) :: interfaces
+    
+      real(dp) :: ds
 
       ! dummy variable
       integer :: i
 
       ! fill interface values
       do i = PHYmin, PHYmax
+          
+          ! calculate ds
+          ds = delta_state_van_leer( state(i-1:i+1) )    
 
           ! left/west interface
-          interfaces(i,1) = state(i) - delta_state_van_leer(state, i)
+          interfaces(i,1) = state(i) - ds
           ! right/east interface
-          interfaces(i,2) = state(i) + delta_state_van_leer(state, i)
+          interfaces(i,2) = state(i) + ds
       end do
 
       call boundaries(interfaces)
@@ -618,19 +669,17 @@ module reconstruction
 
 
     ! internal function calculating delta_state using van leer limiter
-    function delta_state_van_leer(state, i) result(ds)
+    function delta_state_van_leer(stencil) result(ds)
 
       implicit none
 
-      real(dp), dimension(:), intent(in) :: state ! state vector
-      integer, intent(in) :: i                    ! actual index
-
+      real(dp), dimension(3), intent(in) :: stencil ! state(i-1:i+1)
       real(dp) :: ds
 
       ! van leer TVD limiter
-      if ( abs(state(i+1) - state(i-1)) > 1d-12 ) then
-        ds = max( (state(i+1)-state(i)) * (state(i)-state(i-1)), 0.0_dp )
-        ds = ds / (state(i+1) - state(i-1))
+      if ( abs(stencil(3) - stencil(1)) > 1.0d-16 ) then
+        ds = max( (stencil(3)-stencil(2)) * (stencil(2)-stencil(1)), 0.0_dp )
+        ds = ds / (stencil(3) - stencil(1))
       else 
         ds = 0.0_dp
       end if
@@ -675,6 +724,7 @@ module flux
 
       ! reconstruct interface values
       call recon_lin_van_leer(state, interfaces)
+      !call godunov(state, interfaces) 
 
       ! fluxes(i) correspond to the left interface of cell i [F(i-1/2)]
       if (vel >= 0) then
@@ -813,9 +863,9 @@ program conv_test
 
   ! characters
   !   folder - where to store output files,
-  !   arg1   - first argument passed in command line when executeíng programm.
-  character(len=:), allocatable :: folder
-  character(len=50) :: arg1
+  !   arg    - arguments passed in command line when executeing the programm.
+  character(len=:), allocatable :: folder1, folder2
+  character(len=50) :: arg1, arg2
 
   ! floating point arrays
   !   state     - state vector
@@ -835,9 +885,18 @@ program conv_test
   ! set folder
   if (iargc() == 1) then
     call getarg(1, arg1)
-    folder = arg1
+    folder1 = arg1
+    folder2 = folder1
+
+  else if (iargc() == 2) then
+    call getarg(1, arg1)
+    call getarg(2, arg2)
+    folder1 = arg1
+    folder2 = arg2
+
   else
-    folder = fullname(".")
+    folder1 = fullname(".")
+    folder2 = folder1
   end if
 
   !*******************
@@ -849,11 +908,13 @@ program conv_test
   write(*,*) ' Setting up Convergence Test:'
   write(*,*) '============================================================'
   !write(*,*) ''
-  write(*,*) ' output folder: ', color(trim(folder),'yellow')
+  write(*,*) ' output folder (EOC):    ', color(trim(folder1),'yellow')
+  write(*,*) ' output folder (states): ', color(trim(folder2),'yellow')
 
   call info( "  reading in parameters from 'parameters.txt'")
   call read_param('parameters.txt', skip_first_char=.true.)
   call end_info()
+
   write(*,'(A,I13.1)')  '    amount of cells:       ', ncells
   write(*,'(A,I13.1)')  '    amount of ghost cells: ', ngcells
   write(*,'(A,F13.4)')  '    maximal time:          ', tend
@@ -862,7 +923,7 @@ program conv_test
   write(*,'(A,F13.4)')  '    velocity:              ', vel
 
   ! loop over resplutions
-  do i = 1, 9
+  do i = 1, runs
 
     ! improve resolution
     if (i > 1) then
@@ -888,6 +949,10 @@ program conv_test
     state_ini(:) = state(:)
     call end_info()
 
+    !call info('  write out initial state')
+    !call write_state(state, folder2)
+    !call end_info()
+    
     write(*,*) ''
     write(*,*) ' start integration:'
     
@@ -900,14 +965,13 @@ program conv_test
 
       time = time + dt
 
-      ! test purpose
-      !if ( write_cond(time, dt_max, 1.0d-10) ) then
-      !  call write_state(state, folder)
-      !end if
+      
+      if ( write_cond(time, dt_max, 1.0d-16) ) then
+        call write_state(state, folder2)
+      end if
 
-
-      if ( write_cond(time, t_wo, 1.0d-15) ) then
-         call write_conv(state, state_ini, folder)
+      if ( write_cond(time, t_wo, 1.0d-16) ) then
+         call write_conv(state, state_ini, folder1)
       end if
     end do
 
@@ -919,13 +983,16 @@ program conv_test
 
   end do
 
-  call system('rm '//trim(folder)//'*.bak', delstat)
+  call system('rm '//trim(folder1)//'*.bak', delstat)
   if (delstat /= 0) then
-    call system('rm '//trim(folder)//'/*.bak')
+    call system('rm '//trim(folder1)//'/*.bak')
   end if
 
 
-  write(*,*) '============================================================'
+  write(*,*) '============================================================' 
+  call info('  calculating order of convergence')
+  call system('python src/add_eoc.py '//trim(folder1))
+  call end_info()
   write(*,*) color(' CONVERGENCE TEST SUCCESSFULLY DONE!', 'green')
   write(*,*) '============================================================'
 
