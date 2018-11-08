@@ -993,9 +993,9 @@ program conv_test
   call info('  calculating order of convergence')
   call system('python src/add_eoc.py '//trim(folder1))
   call end_info()
-  write(*,*) ''
+
+  write(*,*) '============================================================'
   write(*,*) color('   CONVERGENCE TEST SUCCESSFULLY DONE!', 'green')
-  write(*,*) ''
   write(*,*) '============================================================'
 
 end program conv_test
