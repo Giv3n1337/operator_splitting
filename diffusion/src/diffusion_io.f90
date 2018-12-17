@@ -236,16 +236,18 @@ module diffusion_io
       end if  
      
       ! calculating error
-      ratio1 = real(ncells,dp) / real(ncells_ini,dp)
-      ratio2 = real(ncells_ref,dp) / real(ncells_ini,dp)
-      err = 0.0_dp
+      !ratio1 = real(ncells,dp) / real(ncells_ini,dp)
+      !ratio2 = real(ncells_ref,dp) / real(ncells_ini,dp)
+      !err = 0.0_dp
 
-      do i = 0, ncells_ini - 1
-        err = err + abs(     state( int(ratio1*(0.5_dp + i)) + 1 ) - &
-                         state_ref( int(ratio2*(0.5_dp + i)) + 1 ) )
-      end do
+      !do i = 0, ncells_ini - 1
+      !  err = err + abs( state(ngcells + int(ratio1*(0.5_dp + i)) + 1 ) - &
+      !               state_ref(ngcells + int(ratio2*(0.5_dp + i)) + 1 ) )
+      !end do
 
-      err = err / real(ncells_ini)
+      !err = err / real(ncells_ini, dp)
+	  err = sum( abs(state(PHYmin:PHYmax) - state_ref(PHYmin:PHYmax)) )	
+	  err = err / real(ncells, dp)
 
       ! write resolution, error
       write(20,*,iostat=write_stat) ncells, err
@@ -323,7 +325,7 @@ module diffusion_io
 
       real(dp), intent(in) :: time, t_wo, acc
 
-      write_cond = mod(time,t_wo) < acc .or. 1.0d0 - mod(time,t_wo) < acc
+      write_cond = (mod(time,t_wo) < acc) .or. (1.0d0 - mod(time,t_wo) < acc)
 
     end function write_cond
 

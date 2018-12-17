@@ -48,7 +48,9 @@ module crank_nicolson
       integer, dimension(ncells) :: ipiv
       integer :: info
 
-      !! external procedures from lapack
+      ! external procedures from lapack
+      external DSYMV
+
       ! external DGESV  ! solves the system A*X=B for X, 
       !                 ! whereas A is symmertic n-by-n matrix
       !                 ! therefore using LU decomposition.
@@ -89,8 +91,12 @@ module crank_nicolson
       B(ncells, 1) = alpha
       
 
+      state_inter(:) = 0.0_dp
+
       ! calculate B * u(t)
-      state_inter = matmul(B,state(PHYmin:PHYmax)) 
+      !state_inter = matmul(B,state(PHYmin:PHYmax)) 
+      call dsymv('U', size(state(PHYmin:PHYmax)), 1.0_dp, B, size(B,1), &
+        state(PHYmin:PHYmax), 1, 0.0_dp, state_inter, 1)
 
       !call DGECON('I', size(A,1), A, ncells, sum(abs(A(1,:))), RCOND, WORK, IWORK, INFO) 
 
@@ -118,8 +124,10 @@ module crank_nicolson
       !end if
     
       ! update state
-      state(PHYmin:PHYmax) = matmul(A_inv,state_inter(:))
-      
+      !state(PHYmin:PHYmax) = matmul(A_inv,state_inter)
+
+      call dsymv('U', size(state_inter), 1.0_dp, A_inv, size(A_inv,1), state_inter, &
+        1, 0.0_dp, state(PHYmin:PHYmax), 1)
 
     end subroutine crank_nicolson_2
   

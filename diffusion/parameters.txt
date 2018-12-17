@@ -4,7 +4,7 @@ time_end      5.0
 dt_max        0.015625
 cfl           0.5
 velocity      1.0
-runs          4
+runs          8
 sigma(Gauss)  0.1
 ncells_ref    2592     
 diff_const    0.01

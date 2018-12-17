@@ -74,50 +74,55 @@ program conv_test
   write(*,'(A,I13.1)')  '    reference resolution (cells) ', ncells_ref
   write(*,*)   '============================================================'
 
-  call info("  storing initial amount of cells")
-  ncells_ini = ncells
-  call end_info
+!  call info("  storing initial amount of cells")
+!  ncells_ini = ncells
+!  call end_info
 
-  ncells = ncells_ref
-  write(*,*)   ' setting up reference solution:'
-  write(*,*)   '============================================================'
-  write(*,*)   '     amount of cells:      ', ncells
-  write(*,*)   '============================================================'
+!  ncells = ncells_ref
+!  write(*,*)   ' setting up reference solution:'
+!  write(*,*)   '============================================================'
+!  write(*,*)   '     amount of cells:      ', ncells
+!  write(*,*)   '============================================================'
 
-  ! initialize reference integration
-  call info( '   initializing state and seting parameters')
-  call initialize(state, state_ref, A_inv, dt)
-  call end_info()
+!  call info('   adjusting time step')
+!  dt_max = 1.0_dp/(3.0_dp)**(runs+1) * dt_max
+!  call end_info()
 
-  call info('   adjusting time step')
-  dt_max = 1.0_dp/(3.0_dp)**(runs+1) * dt_max
-  call end_info()
+!  ! initialize reference integration
+!  call info( '   initializing state and setting parameters')
+!  call initialize(state, state_ref, A_inv, dt)
+!  call end_info()
 
-  write(*,*)   '  start integration:'
-  write(*,*)   ''
+!  write(*,*)   '  start integration:'
+!  write(*,*)   ''
 
   ! integration
-  do while (time < tend)
-    call crank_nicolson_2(state, dt, A_inv, 1)
-    call show_progress()
+!  do while (time < tend)
+!    call crank_nicolson_2(state, dt, A_inv, 1)
+!    call show_progress()
 
-    time = time + dt
-  end do
+!    time = time + dt
+    
+!    if ( write_cond(time, t_wo, 1.0d-16) ) then
+!        call write_state(state, folder2)
+!    end if
+    
+!  end do
 
-  call end_progress()
+!  call end_progress()
 
-  write(*,*) ''
-  write(*,*) color('   Done!','green')
-  write(*,*) ''
+!  write(*,*) ''
+!  write(*,*) color('   Done!','green')
+!  write(*,*) ''
 
-  call info(  '  store reference frame')
-  state_ref = state
-  call end_info
+!  call info(  '  store reference frame')
+!  state_ref = state
+!  call end_info
 
-  call info(  '  reseting resolution and time step')
-  ncells = ncells_ini
-  dt_max = dt_max * 3.0_dp**(runs+1)
-  call end_info
+!  call info(  '  reseting resolution and time step')
+!  ncells = ncells_ini
+!  dt_max = dt_max * 3.0_dp**(runs+1)
+!  call end_info
 
   write(*,*) ''
   write(*,*) '  starting convergence test:'
@@ -128,8 +133,8 @@ program conv_test
 
     ! improve resolution
     if (i > 1) then
-      ncells = 3 * ncells
-      dt_max = 1.0_dp/(3.0_dp) * dt_max
+      ncells = 		2 * ncells
+      dt_max = 0.5_dp * dt_max
     end if
 
     write(*,*) '============================================================'
@@ -137,19 +142,16 @@ program conv_test
     write(*,*) '============================================================'
 
     if (allocated(state)) then
-      call info( "  deallocating old 'state' array")
-      deallocate(state, A_inv)
+      call info( "  deallocating old arrays")
+      deallocate(state, state_ref, A_inv)
       call end_info()
     end if
+
 
     call info( '  initializing state and set parameters')
     call initialize(state, state_ref, A_inv, dt)
     call end_info()
 
-    !call info('  write out initial state')
-    !call write_state(state, folder2)
-    !call end_info()
-  
     write(*,*) ''
     write(*,*) ' starting integration:'
     
@@ -161,8 +163,8 @@ program conv_test
       call show_progress()
 
       time = time + dt
-
-      if ( write_cond(time, tend, 1.0d-16) ) then
+	 
+      if ( write_cond(time, t_wo, 1.0d-16) ) then
         call write_state(state, folder2)
       end if
     end do

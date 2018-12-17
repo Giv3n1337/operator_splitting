@@ -57,16 +57,22 @@ module diffusion_helpers
       ! calculate/set values/parameters and allocate arrays
       call initialize_param(state, state_ref, A_inv, dt)
 
-      ! set initial condition
+      ! set initial condition and reference solution
       do i = 1, ncells
-        state(ngcells+i) = 1.0_dp / (sig*sqrt(2.0_dp*pi)) * &        ! Gaussian
-          exp( -0.5_dp*( (i*dx - 0.5_dp*dx - 0.5_dp) / sig)**2 ) 
+        !state(ngcells+i) = 1.0_dp / (sig*sqrt(2.0_dp*pi)) * &      ! Gaussian
+        !  exp( -0.5_dp*( (i*dx - 0.5_dp*dx - 0.5_dp) / sig)**2 ) 
 
-        ! if (i <= 0.25d0*ncells .or. i >= 0.75d0*ncells) then       ! Square
+        ! if (i <= 0.25d0*ncells .or. i >= 0.75d0*ncells) then      ! Square
         !   state(ngcells+i) = 0.0d0
         ! else
         !   state(ngcells+i) = 2.0d0
         ! end if
+        
+        state(ngcells+i) = sin(2.0_dp*pi*(i-0.5_dp)*dx) 			! Sin
+        
+        
+        state_ref(ngcells+i) = sin(2.0_dp*pi*(i-0.5_dp)*dx) *    &  ! ref
+			exp(-1.0_dp * diff_const* (2.0_dp * pi)**2 * tend)
       end do
 
       ! initialize progess bar
@@ -111,6 +117,7 @@ module diffusion_helpers
       ! floating point fields
       real(dp), dimension(:),   allocatable, intent(inout) :: state, state_ref
       real(dp), dimension(:,:), allocatable, intent(inout) :: A_inv
+	  real(dp), dimension(:,:), allocatable :: work
 
       ! floating point values
       real(dp), intent(inout) :: dt
@@ -121,11 +128,19 @@ module diffusion_helpers
 	  ! info
 	  integer :: info
 	  
-	  external DPOTR	! matrix inversion using cholesky decomposition
+	  
+	  integer, dimension(ncells) :: ipiv
+	   
+	  external DSYTRI   ! symmetric matrix inversion
+	  external DSYTRF   ! Bunch-Kaufman factorization of a symmetric matrix 
+	  
+	  !external DGETRF  ! LU decomposition
+	  !external DGETRI	! matrix inversion using LU decomposition
 	  
       ! allocate arrays
       allocate(  state( ncells + 2*ngcells )  )
-      allocate(  A_inv(ncells, ncells))
+      allocate(  A_inv(ncells, ncells) )
+      allocate(  work(ncells, ncells)  ) 
       
       if (.not. allocated(state_ref)) then
 		allocate(  state_ref( ncells + 2*ngcells )  ) 
@@ -152,12 +167,26 @@ module diffusion_helpers
 		A_inv(i+1,i) = -1.0_dp * alpha
       end do
       
-      A_inv(ncells,ncells) = 1.0_dp + 2.0_dp * alpha
+      A_inv(ncells,ncells) =  1.0_dp + 2.0_dp * alpha
 	  A_inv(1, ncells)     = -1.0_dp * alpha
 	  A_inv(ncells, 1)     = -1.0_dp * alpha
 	  
-	  call dpotri('U', ncells, A_inv, ncells, info)
+	! call dgetrf(size(A_inv,1), size(A_inv,1), A_inv, size(A_inv,1),   &
+	!	ipiv, info)
+	
+	  call dsytrf('U', size(A_inv,1), A_inv, size(A_inv,1), ipiv, work, &
+		64*size(A_inv,1), info)
+	  
+	  if (info /= 0) then
+		stop 'matrix is numerically singular!'
+	  end if
+	  
+	! call dgetri(size(A_inv,1), A_inv, size(A_inv,1), ipiv, work,      &
+	!	size(A_inv,1), info)
  
+	  call dsytri('U', size(A_inv,1), A_inv, size(A_inv,1), ipiv, work, &
+		info)
+	 
     end subroutine initialize_param
 
 end module diffusion_helpers

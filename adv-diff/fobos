@@ -1,0 +1,59 @@
+[modes]
+modes = test convergence_test convergence_test-debug
+
+[test]
+help      = Compiig with GNU
+compiler  = Gnu
+cflags    = -c
+exclude   = convergence_test.f90
+mod_dir   = ./tests/mod/
+obj_dir   = ./tests/obj/
+build_dir = ./tests/
+src       = ./src/
+ext_libs  = io_helpers lapack blas
+lib_dir   = /home/gwaihir/d.kube/.local/lib/fortran/
+include   = /home/gwaihir/d.kube/.local/lib/fortran/ 
+colors    = True
+quiet     = False
+jobs      = 1
+target    = test.f90
+output    = test
+log       = False
+
+[convergence_test]
+help      = Compiling with GNU in Debug-Mode
+compiler  = Gnu
+cflags    = -c
+exclude   = test.f90
+mod_dir   = ./mod/
+obj_dir   = ./obj/
+build_dir = .
+src       = ./src/
+ext_libs  = io_helpers lapack blas
+lib_dir   = /home/gwaihir/d.kube/.local/lib/fortran/
+include   = /home/gwaihir/d.kube/.local/lib/fortran/
+colors    = True
+jobs      = 1
+target    = convergence_test.f90
+output    = convergence_test
+log       = False
+
+
+[convergence_test-debug]
+help      = Compiling with GNU in Debug-Mode
+compiler  = Gnu
+cflags    = -g0 -Wall -Wextra -fcheck=all -fbacktrace
+exclude   = test.f90
+mod_dir   = ./mod/
+obj_dir   = ./obj/
+build_dir = .
+src       = ./src/
+ext_libs  = io_helpers lapack blas
+lib_dir   = /home/gwaihir/d.kube/.local/lib/fortran/
+include   = /home/gwaihir/d.kube/.local/lib/fortran/
+colors    = True
+jobs      = 1
+target    = convergence_test.f90
+output    = convergence_test
+log       = True
+
