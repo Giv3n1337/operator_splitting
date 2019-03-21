@@ -1,0 +1,8 @@
+ncells        32
+ngcells       2
+time_end      5.0
+dt_max        0.015625
+cfl           0.5
+velocity      1.0
+runs          9
+sigma(Gauss)  0.1

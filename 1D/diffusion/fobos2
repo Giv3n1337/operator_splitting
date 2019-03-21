@@ -1,0 +1,20 @@
+[modes]
+modes = convergence_test
+
+[convergence_test]
+help      = Compiling with GNU in Debug-Mode                                    
+compiler  = Gnu                                                                 
+cflags    = -c                                                                  
+exclude   = test.f90                                                            
+mod_dir   = ./mod/                                                              
+obj_dir   = ./obj/                                                              
+build_dir = .                                                                   
+src       = ./src/                                                              
+ext_libs  = io_helpers lapack blas                                              
+lib_dir   = /home/gwaihir/d.kube/.local/lib/fortran/                            
+include   = /home/gwaihir/d.kube/.local/lib/fortran/                            
+colors    = True                                                                
+jobs      = 1                                                                   
+target    = convergence_test.f90                                                
+output    = convergence_test                                                    
+log       = False                                                                                    

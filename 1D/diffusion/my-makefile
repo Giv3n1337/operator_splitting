@@ -1,0 +1,81 @@
+#!/usr/bin/make
+
+#main building variables
+DSRC    = src
+DOBJ    = obj/
+DMOD    = mod/
+DEXE    = ./
+LIBS    =  -lio_helpers  -llapack  -lblas  -L/home/gwaihir/d.kube/.local/lib/fortran/ 
+FC      = gfortran
+OPTSC   = -c -O2 -J mod
+OPTSL   =  -J mod
+VPATH   = $(DSRC) $(DOBJ) $(DMOD)
+MKDIRS  = $(DOBJ) $(DMOD) $(DEXE)
+LCEXES  = $(shell echo $(EXES) | tr '[:upper:]' '[:lower:]')
+EXESPO  = $(addsuffix .o,$(LCEXES))
+EXESOBJ = $(addprefix $(DOBJ),$(EXESPO))
+
+#auxiliary variables
+COTEXT  = "Compiling $(<F)"
+LITEXT  = "Assembling $@"
+
+#building rules
+$(DEXE)CONVERGENCE_TEST: $(MKDIRS) $(DOBJ)convergence_test.o
+	@rm -f $(filter-out $(DOBJ)convergence_test.o,$(EXESOBJ))
+	@echo $(LITEXT)
+	@$(FC) $(OPTSL) $(DOBJ)*.o $(LIBS) -o $@
+EXES := $(EXES) CONVERGENCE_TEST
+
+#compiling rules
+$(DOBJ)crank_nicolson.o: src/crank_nicolson.f90 \
+	$(DOBJ)globals.o \
+	$(DOBJ)basic_helpers.o
+	@echo $(COTEXT)
+	@$(FC) $(OPTSC) -I/home/gwaihir/d.kube/.local/lib/fortran  $< -o $@
+
+$(DOBJ)basic_helpers.o: src/basic_helpers.f90 \
+	$(DOBJ)globals.o
+	@echo $(COTEXT)
+	@$(FC) $(OPTSC) -I/home/gwaihir/d.kube/.local/lib/fortran  $< -o $@
+
+$(DOBJ)globals.o: src/globals.f90
+	@echo $(COTEXT)
+	@$(FC) $(OPTSC) -I/home/gwaihir/d.kube/.local/lib/fortran  $< -o $@
+
+$(DOBJ)convergence_test.o: src/convergence_test.f90 \
+	$(DOBJ)diffusion_io.o \
+	$(DOBJ)diffusion_helpers.o \
+	$(DOBJ)crank_nicolson.o
+	@echo $(COTEXT)
+	@$(FC) $(OPTSC) -I/home/gwaihir/d.kube/.local/lib/fortran  $< -o $@
+
+$(DOBJ)diffusion_helpers.o: src/diffusion_helpers.f90 \
+	$(DOBJ)diffusion_io.o
+	@echo $(COTEXT)
+	@$(FC) $(OPTSC) -I/home/gwaihir/d.kube/.local/lib/fortran  $< -o $@
+
+$(DOBJ)diffusion_io.o: src/diffusion_io.f90 \
+	$(DOBJ)globals.o
+	@echo $(COTEXT)
+	@$(FC) $(OPTSC) -I/home/gwaihir/d.kube/.local/lib/fortran  $< -o $@
+
+#phony auxiliary rules
+.PHONY : $(MKDIRS)
+$(MKDIRS):
+	@mkdir -p $@
+.PHONY : cleanobj
+cleanobj:
+	@echo deleting objects
+	@rm -fr $(DOBJ)
+.PHONY : cleanmod
+cleanmod:
+	@echo deleting mods
+	@rm -fr $(DMOD)
+.PHONY : cleanexe
+cleanexe:
+	@echo deleting exes
+	@rm -f $(addprefix $(DEXE),$(EXES))
+.PHONY : clean
+clean: cleanobj cleanmod
+.PHONY : cleanall
+cleanall: clean cleanexe

@@ -1,0 +1,10 @@
+dimension 	  3
+ncells        32
+ngcells       2
+time_end      1.0
+dt_max        0.015625
+cfl           0.5
+velocity      1.0 0.0 0.0
+runs          5
+diff_const    0.00
+scaling_fact  2
